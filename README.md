@@ -1,63 +1,67 @@
 # srvcs-range
 
-The range orchestrator of the srvcs.cloud distributed standard library.
+## Name
 
-Its single concern: **the range (max - min) of a list of integers.** It does no
-arithmetic of its own. It composes two other services:
+| Field | Value |
+| --- | --- |
+| Service | `srvcs-range` |
+| Slug | `range` |
+| Repository | `srvcs/range` |
+| Package | `srvcs-range` |
+| Kind | `orchestrator` |
 
-```text
-sorted = sortascending(values).result      # one HTTP call to srvcs-sortascending
-result = subtract(sorted[last], sorted[0])  # one HTTP call to srvcs-subtract
-```
+## Function
 
-The **empty list** is rejected with `422`. A singleton has range `0`
-(`subtract(x, x) == 0`).
+comparison: range (max - min) of a list
 
-```text
-range([1, 5, 3]) == 4
-range([7])       == 0
-```
+## Dependencies
+
+| Dependency | Repository |
+| --- | --- |
+| `srvcs-sortascending` | [srvcs/sortascending](https://github.com/srvcs/sortascending) |
+| `srvcs-subtract` | [srvcs/subtract](https://github.com/srvcs/subtract) |
 
 ## API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/` | Service identity, concern, and dependency list |
-| `POST` | `/` | Range (max - min) of the integers in `values` |
-| `GET` | `/healthz` `/readyz` `/metrics` `/openapi.json` | srvcs service standard surface |
+| `GET` | `/` | Service identity |
+| `POST` | `/` | Evaluate the service function |
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/openapi.json` | OpenAPI document |
 
-```sh
-curl -s -X POST localhost:8080/ -H 'content-type: application/json' -d '{"values": [1, 5, 3]}'
-# {"values":[1,5,3],"result":4}
-```
+## Inputs
 
-Responses:
+| Name | Type | Required |
+| --- | --- | --- |
+| `values` | `json[]` | yes |
 
-- `200 {"values": [...], "result": n}` — evaluated.
-- `422` — empty list, or an element is not a valid integer (forwarded from a dependency).
-- `500` — a dependency returned an unusable response.
-- `503` — a dependency is unavailable.
+## Outputs
 
-## Dependencies
-
-- [`srvcs-sortascending`](https://github.com/srvcs/sortascending)
-- [`srvcs-subtract`](https://github.com/srvcs/subtract)
-
-This is an orchestrator: it never calls `srvcs-isnumber` directly. Validation
-propagates from its dependencies — a non-integer element is rejected by
-`srvcs-sortascending` and the resulting `422` is forwarded unchanged.
+| Name | Type |
+| --- | --- |
+| `values` | `json[]` |
+| `result` | `integer` |
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SRVCS_BIND_ADDR` | `0.0.0.0:8080` | Bind address |
-| `SRVCS_SORTASCENDING_URL` | `http://127.0.0.1:8086` | Base URL of `srvcs-sortascending` |
-| `SRVCS_SUBTRACT_URL` | `http://127.0.0.1:8087` | Base URL of `srvcs-subtract` |
 | `SRVCS_ENV` | `development` | Environment label for logs |
 | `RUST_LOG` | `info,tower_http=info` | Tracing filter |
+| `SRVCS_SORTASCENDING_URL` | `` | Base URL for srvcs-sortascending |
+| `SRVCS_SUBTRACT_URL` | `http://127.0.0.1:8087` | Base URL for srvcs-subtract |
 
-## Local checks
+## Error Behavior
+
+- `422` means the request could not be evaluated for the documented input shape.
+- `503` means a required dependency was unavailable or returned an unexpected response.
+- Dependency validation errors are forwarded when this service delegates validation.
+
+## Local Checks
 
 ```sh
 cargo fmt --check
@@ -65,10 +69,8 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Orchestration tests stand up mock dependencies in-process that **actually
-compute** (sortascending really sorts; subtract really subtracts), so the
-composition is genuinely exercised (e.g. `range([1,5,3]) == 4`). See
-[`srvcs/platform`](https://github.com/srvcs/platform) for the shared standard.
+See the [srvcs service standard](https://github.com/srvcs/platform/blob/main/STANDARD.md) for the full operational contract.
 
-> Note: the `cargoHash` in `flake.nix` is inherited from the template and must be
-> refreshed with a `nix build` before the Nix gates pass.
+## Metadata
+
+Machine-readable service metadata lives in `srvcs.yaml`. Keep it aligned with this README when the service contract changes.
